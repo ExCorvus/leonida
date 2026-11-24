@@ -959,6 +959,22 @@ int check_xbox_slots() {
     // output on failure, so an invalid call would clear this pointer.
     EXPECT(release(list) == 0);
 
+    // The measured console list IID maps to ID3D12GraphicsCommandList6: slot 73 answers it, the PC call gets the
+    // mapped IID, and a QueryInterface for the console IID on the proxy returns the proxy.
+    mock->list_level = 7;  // the real list must answer the mapped PC IID
+    const IID console_list_iid = {0xc3827890, 0x4024, 0x474c, {0x98, 0xcf, 0x64, 0x5b, 0x51, 0xdc, 0x48, 0x74}};
+    void* console_list = nullptr;
+    EXPECT(hr_of(raw(device, 73, word(&desc), word(allocator), 0, word(&console_list_iid), word(&console_list))) == S_OK);
+    EXPECT(xs::is_command_list_proxy(console_list));
+    IID mapped_iid{};
+    std::memcpy(&mapped_iid, reinterpret_cast<const void*>(mock->args[12][4]), sizeof(IID));
+    EXPECT(IsEqualIID(mapped_iid, __uuidof(ID3D12GraphicsCommandList6)));
+    void* console_qi = nullptr;
+    EXPECT(hr_of(raw(console_list, 0, word(&console_list_iid), word(&console_qi))) == S_OK &&
+           console_qi == console_list);
+    EXPECT(release(console_qi) == 1);
+    EXPECT(release(console_list) == 0);
+
     // Missing description, allocator or output: E_INVALIDARG/E_POINTER before the real device is called.
     EXPECT(hr_of(raw(device, 73, 0, word(allocator), 0, word(&list_iid), word(&list))) == E_INVALIDARG);
     EXPECT(hr_of(raw(device, 73, word(&desc), 0, 0, word(&list_iid), word(&list))) == E_INVALIDARG);
